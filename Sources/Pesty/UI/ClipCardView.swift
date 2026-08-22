@@ -7,9 +7,16 @@ struct ClipCardView: View {
     let selected: Bool
 
     @State private var hovering = false
+    @State private var dropPosition: ItemDropPosition?
     private var store: ClipboardStore { ClipboardStore.shared }
     private var settings: Settings { Settings.shared }
-    private var headerColor: Color { SourceColor.color(for: item.sourceBundleID) }
+    private var headerColor: Color {
+        guard let boardID = store.currentPinboardID,
+              let board = store.pinboards.first(where: { $0.id == boardID }) else {
+            return SourceColor.color(for: item.sourceBundleID)
+        }
+        return board.color
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -44,8 +51,34 @@ struct ClipCardView: View {
         .onTapGesture { store.select(item.id) }
         .highPriorityGesture(TapGesture().modifiers(.shift).onEnded { store.extendSelection(to: item.id) })
         .highPriorityGesture(TapGesture().modifiers(.command).onEnded { store.toggleSelection(item.id) })
-        .onDrag { ClipDragProvider.make(for: item) }
+        .onDrag {
+            store.beginDragging(item.id)
+            return ClipDragProvider.make(for: item)
+        }
+        .onDrop(of: [ClipDragProvider.internalItemTypeIdentifier],
+                delegate: ClipReorderDropDelegate(targetItemID: item.id,
+                                                  source: store.source,
+                                                  store: store,
+                                                  dropPosition: $dropPosition))
+        .overlay { dropIndicator }
         .contextMenu { menu }
+    }
+
+    @ViewBuilder
+    private var dropIndicator: some View {
+        if let dropPosition {
+            HStack(spacing: 0) {
+                if dropPosition == .after { Spacer(minLength: 0) }
+                Capsule()
+                    .fill(Theme.selection)
+                    .frame(width: 4)
+                    .padding(.vertical, 8)
+                    .shadow(color: Theme.selection.opacity(0.5), radius: 4)
+                if dropPosition == .before { Spacer(minLength: 0) }
+            }
+            .padding(.horizontal, -8)
+            .allowsHitTesting(false)
+        }
     }
 
     private var header: some View {
@@ -62,12 +95,23 @@ struct ClipCardView: View {
                 }
                 .lineLimit(1)
                 Spacer(minLength: 4)
+                if isPinnedInCurrentPinboard { pinBadge }
                 appIconTile
             }
             .padding(.horizontal, 13)
             .padding(.vertical, 7)
         }
         .frame(height: Theme.headerHeight)
+    }
+
+    private var pinBadge: some View {
+        Image(systemName: "pin.fill")
+            .font(.system(size: 11, weight: .bold))
+            .foregroundStyle(Theme.headerText)
+            .frame(width: 26, height: 26)
+            .background(Color.white.opacity(0.16), in: Circle())
+            .overlay(Circle().strokeBorder(Color.white.opacity(0.18)))
+            .accessibilityLabel("Pinned to top")
     }
 
     private var appIconTile: some View {
@@ -206,6 +250,14 @@ struct ClipCardView: View {
             Label("Copy", systemImage: "doc.on.doc")
         }
 
+        if let boardID = store.currentPinboardID {
+            Divider()
+            Button { store.togglePinned(item.id, inPinboard: boardID) } label: {
+                Label(isPinnedInCurrentPinboard ? "Unpin from Top" : "Pin to Top",
+                      systemImage: isPinnedInCurrentPinboard ? "pin.slash" : "pin.fill")
+            }
+        }
+
         Divider()
 
         Button { AppController.shared.editItem(item) } label: {
@@ -226,11 +278,10 @@ struct ClipCardView: View {
         Divider()
 
         Menu {
-            if store.pinboards.isEmpty {
-                Button("No Pinboards Yet") {}
-                    .disabled(true)
+            if destinationPinboards.isEmpty {
+                Button("No Other Pinboards") {}.disabled(true)
             } else {
-                ForEach(store.pinboards) { b in
+                ForEach(destinationPinboards) { b in
                     Button { store.saveToPinboard(item, boardID: b.id) } label: {
                         Label {
                             Text(b.name)
@@ -242,11 +293,36 @@ struct ClipCardView: View {
                 }
             }
             Divider()
-            Button { pinToNewBoard() } label: {
+            Button { copyToNewBoard() } label: {
                 Label("Create Pinboard…", systemImage: "plus")
             }
         } label: {
-            Label("Pin", systemImage: "pin")
+            Label("Copy to Pinboard", systemImage: "doc.on.doc")
+        }
+
+        Menu {
+            if destinationPinboards.isEmpty {
+                Button("No Other Pinboards") {}.disabled(true)
+            } else {
+                ForEach(destinationPinboards) { board in
+                    Button {
+                        store.moveItem(item.id, from: store.source, toPinboard: board.id)
+                    } label: {
+                        Label {
+                            Text(board.name)
+                        } icon: {
+                            Image(nsImage: Self.pinboardMenuIcon(color: NSColor(board.color)))
+                                .renderingMode(.original)
+                        }
+                    }
+                }
+            }
+            Divider()
+            Button { moveToNewBoard() } label: {
+                Label("Create Pinboard and Move…", systemImage: "plus")
+            }
+        } label: {
+            Label("Move to Pinboard", systemImage: "folder")
         }
 
         Divider()
@@ -277,6 +353,16 @@ struct ClipCardView: View {
         [.text, .richText, .link, .color].contains(item.type)
     }
 
+    private var destinationPinboards: [Pinboard] {
+        let currentID = store.currentPinboardID
+        return store.pinboards.filter { $0.id != currentID }
+    }
+
+    private var isPinnedInCurrentPinboard: Bool {
+        guard let boardID = store.currentPinboardID else { return false }
+        return store.isPinned(item.id, inPinboard: boardID)
+    }
+
     private var writingToolsAvailable: Bool {
         guard [.text, .richText, .link].contains(item.type) else { return false }
         guard #available(macOS 15.2, *) else { return false }
@@ -290,10 +376,17 @@ struct ClipCardView: View {
         }
     }
 
-    private func pinToNewBoard() {
+    private func copyToNewBoard() {
         if let name = TextPrompt.run(title: "Create Pinboard", message: "Name") {
             let board = store.addPinboard(name: name)
             store.saveToPinboard(item, boardID: board.id)
+        }
+    }
+
+    private func moveToNewBoard() {
+        if let name = TextPrompt.run(title: "Create Pinboard", message: "Name") {
+            let board = store.addPinboard(name: name)
+            store.moveItem(item.id, from: store.source, toPinboard: board.id)
         }
     }
 
@@ -306,5 +399,61 @@ struct ClipCardView: View {
         }
         image.isTemplate = false
         return image
+    }
+}
+
+private struct ClipReorderDropDelegate: DropDelegate {
+    let targetItemID: UUID
+    let source: BarSource
+    let store: ClipboardStore
+    @Binding var dropPosition: ItemDropPosition?
+
+    func validateDrop(info: DropInfo) -> Bool {
+        guard let draggedItemID = store.draggedItemID else { return false }
+        return store.draggedSource == source
+            && store.canReorderItem(draggedItemID, relativeTo: targetItemID, in: source)
+            && info.hasItemsConforming(to: [ClipDragProvider.internalItemTypeIdentifier])
+    }
+
+    func dropEntered(info: DropInfo) {
+        updateDropPosition(info: info)
+    }
+
+    func dropExited(info: DropInfo) {
+        dropPosition = nil
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        guard validateDrop(info: info) else {
+            dropPosition = nil
+            return DropProposal(operation: .forbidden)
+        }
+        updateDropPosition(info: info)
+        return DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard validateDrop(info: info), let draggedItemID = store.draggedItemID else {
+            dropPosition = nil
+            return false
+        }
+        let position = position(for: info)
+        store.reorderItem(draggedItemID, relativeTo: targetItemID,
+                          position: position, in: source)
+        store.finishDragging()
+        dropPosition = nil
+        return true
+    }
+
+    private func position(for info: DropInfo) -> ItemDropPosition {
+        info.location.x < Theme.cardWidth / 2 ? .before : .after
+    }
+
+    private func updateDropPosition(info: DropInfo) {
+        guard validateDrop(info: info) else {
+            dropPosition = nil
+            return
+        }
+        dropPosition = position(for: info)
     }
 }

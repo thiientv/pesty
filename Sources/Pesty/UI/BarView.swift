@@ -148,6 +148,7 @@ struct BarView: View {
                 .animation(.spring(response: 0.34, dampingFraction: 0.8), value: store.visibleItems.count)
                 .id(Self.stripStartID)
             }
+            .background(HorizontalScrollWheelSupport())
             .onChange(of: store.barPresentationToken) { _, _ in
                 var transaction = Transaction()
                 transaction.disablesAnimations = true

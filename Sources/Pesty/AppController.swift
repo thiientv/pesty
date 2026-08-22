@@ -492,6 +492,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Events belonging to a native context menu, editor, alert, or the
         // Settings window must stay with their own responder chain. The bar
         // monitor is only responsible for keys delivered to the panel itself.
+        guard !suppressAutoHide else { return event }
         guard event.window === barController?.window else { return event }
 
         if handleBarCommandShortcut(event) { return nil }

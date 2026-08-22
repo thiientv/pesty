@@ -3,10 +3,42 @@ import UniformTypeIdentifiers
 
 @MainActor
 enum ClipDragProvider {
+    // SwiftUI only validates drop targets for registered content types. A private
+    // identifier is not registered when Pesty runs directly as a SwiftPM executable,
+    // so use a system type and keep the UUID representation process-local.
+    static let internalItemTypeIdentifier = UTType.data.identifier
     private static let colorTypeIdentifier = "com.apple.cocoa.pasteboard.color"
+
+    private static func register(_ data: Data, as identifier: String,
+                                 visibility: NSItemProviderRepresentationVisibility = .all,
+                                 on provider: NSItemProvider) {
+        provider.registerDataRepresentation(forTypeIdentifier: identifier, visibility: visibility) { completion in
+            completion(data, nil)
+            return nil
+        }
+    }
+
+    private static func registerText(_ text: String, on provider: NSItemProvider) {
+        register(Data(text.utf8), as: UTType.utf8PlainText.identifier, on: provider)
+    }
+
+    private static func registerImage(_ item: ClipItem, on provider: NSItemProvider) {
+        guard let url = ClipboardStore.shared.imageURL(for: item) else { return }
+        provider.registerDataRepresentation(forTypeIdentifier: UTType.png.identifier, visibility: .all) { completion in
+            do {
+                completion(try Data(contentsOf: url), nil)
+            } catch {
+                completion(nil, error)
+            }
+            return nil
+        }
+        provider.suggestedName = "Pesty Image \(item.id.uuidString.prefix(8)).png"
+    }
 
     static func make(for item: ClipItem) -> NSItemProvider {
         let provider = NSItemProvider()
+        register(Data(item.id.uuidString.utf8), as: internalItemTypeIdentifier,
+                 visibility: .ownProcess, on: provider)
         switch item.type {
         case .image:
             registerImage(item, on: provider)
@@ -39,29 +71,5 @@ enum ClipDragProvider {
         }
         if provider.suggestedName == nil { provider.suggestedName = item.displayTitle }
         return provider
-    }
-
-    private static func registerImage(_ item: ClipItem, on provider: NSItemProvider) {
-        guard let url = ClipboardStore.shared.imageURL(for: item) else { return }
-        provider.registerDataRepresentation(forTypeIdentifier: UTType.png.identifier, visibility: .all) { completion in
-            do {
-                completion(try Data(contentsOf: url), nil)
-            } catch {
-                completion(nil, error)
-            }
-            return nil
-        }
-        provider.suggestedName = "Pesty Image \(item.id.uuidString.prefix(8)).png"
-    }
-
-    private static func registerText(_ text: String, on provider: NSItemProvider) {
-        register(Data(text.utf8), as: UTType.utf8PlainText.identifier, on: provider)
-    }
-
-    private static func register(_ data: Data, as identifier: String, on provider: NSItemProvider) {
-        provider.registerDataRepresentation(forTypeIdentifier: identifier, visibility: .all) { completion in
-            completion(data, nil)
-            return nil
-        }
     }
 }

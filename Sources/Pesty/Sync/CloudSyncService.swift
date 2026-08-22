@@ -312,7 +312,10 @@ final class CloudSyncService {
 
     private func fingerprint(_ board: Pinboard) -> String {
         var hasher = SHA256()
-        hasher.update(data: Data("pinboard\0\(board.name)\0\(board.colorHex)".utf8))
+        let pinnedIDs = board.pinnedItemIDs.map(\.uuidString).joined(separator: "|")
+        let itemOrderIDs = board.itemOrderIDs.map(\.uuidString).joined(separator: "|")
+        hasher.update(data: Data(
+            "pinboard\0\(board.name)\0\(board.colorHex)\0\(pinnedIDs)\0\(itemOrderIDs)".utf8))
         return hex(hasher.finalize())
     }
 

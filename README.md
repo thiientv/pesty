@@ -4,154 +4,160 @@
 
 # Pesty
 
-**A free, open-source clipboard manager for macOS - inspired by [Paste](https://pasteapp.io).**
+**A native clipboard manager for macOS, built with Swift and SwiftUI.**
 
-Your clipboard history as a beautiful, color-coded strip that slides up from the bottom of your screen.
-
-[![Download](https://img.shields.io/github/v/release/momenbasel/pesty?label=download&style=flat-square)](https://github.com/momenbasel/pesty/releases/latest)
+[![Release](https://img.shields.io/github/v/release/thiientv/pesty?label=release&style=flat-square)](https://github.com/thiientv/pesty/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 ![Platform](https://img.shields.io/badge/macOS-14%2B-black?style=flat-square&logo=apple)
 ![Universal](https://img.shields.io/badge/Universal-Apple%20Silicon%20%2B%20Intel-orange?style=flat-square)
 
-[**Website**](https://www.moamenbasel.com/pesty/) · [Download](https://github.com/momenbasel/pesty/releases/latest) · [Homebrew](#install) · [Mac App Store](https://apps.apple.com/us/app/pesty-clipboard-manager/id6784511397)
-
-<a href="https://apps.apple.com/us/app/pesty-clipboard-manager/id6784511397"><img src="https://tools.applemediaservices.com/api/badges/download-on-the-mac-app-store/black/en-us?size=250x83" alt="Download Pesty on the Mac App Store" height="56" /></a>
-
-<sub>Pesty is **free and open source**. The one-time fee on the Mac App Store is optional - it only helps cover the yearly Apple Developer Program fee that keeps the app signed and notarized. You never have to pay it: get the exact same app for free via [Homebrew](#install) or [direct download](https://github.com/momenbasel/pesty/releases/latest).</sub>
-
-<img src="docs/assets/demo.gif" width="820" alt="Pesty clipboard manager demo - color-coded clipboard strip with keyboard navigation on macOS" />
-
-### ⭐ If Pesty saved you money, star the repo - it genuinely helps.
+<img src="docs/assets/demo.gif" width="820" alt="Pesty clipboard strip" />
 
 </div>
 
-## What is Pesty?
-
-Pesty keeps a history of everything you copy and lets you get it back instantly. Hit a global hotkey, the strip slides up, you pick a clip with the arrow keys (or `⌘1`–`⌘9`), press `return`, and it pastes straight into whatever app you were in.
-
-It is a faithful, native reimplementation of the Paste experience - built in **Swift + SwiftUI**, with **zero third-party dependencies**, fully **signed and notarized** by Apple, and **free forever**.
+Pesty keeps a searchable history of copied content in a full-width strip. Press the global shortcut, select a clip, and paste it back into the previously active app.
 
 ## Features
 
-- **Slide-up strip** - full-width, translucent bar that springs up from the bottom of the active screen.
-- **Color-coded cards** - each clip has a header band tinted per source app (consistent per app), with the app icon, type label, when it was copied, a preview, and a footer showing character count and a quick-paste number.
-- **All content types** - plain text, rich text, links, images, files, and colors.
-- **Pinboards** - save clips you reuse into named, color-tagged collections that never expire.
-- **iCloud sync** - optionally keep your history and pinboards in sync across your Macs via iCloud Drive.
-- **Instant search** - start typing to filter your whole history.
-- **Keyboard-first** - arrow keys to move, `return` to paste, `⌘1`–`⌘9` to quick-paste, `⌫` or `⌘⌫` to delete, `esc` to close.
-- **Paste directly** - drops the clip into the app you were using, no manual `⌘V` needed.
-- **Privacy-aware** - ignores clips marked concealed by password managers; history stored with `0600` permissions.
-- **Menu-bar app** - runs quietly as a menu-bar item, optional launch at login.
-- **Native & light** - a single universal `.app`, no Electron, no background web stack.
+- Native menu-bar app with a slide-up clipboard strip.
+- Text, rich text, links, images, files, and colors.
+- Instant search and keyboard navigation.
+- Named pinboards for organizing reusable clips.
+- Rename pinboards and assign preset or custom colors to every card in the group.
+- Copy or move clips between pinboards from the context menu or by dragging them onto a pinboard tab.
+- Pin important clips to the beginning of each pinboard with a visible pin badge.
+- Drag clips to reorder them within their pinned or unpinned section.
+- Horizontal mouse-wheel scrolling without holding Shift.
+- Multi-selection, bulk deletion, editing, preview, sharing, and drag-and-drop.
+- Optional iCloud sync across Macs.
+- Per-app privacy exclusions and concealed clipboard-item filtering.
+- Configurable global shortcut, quick-paste modifiers, retention, and launch at login.
+- Universal builds for Apple Silicon and Intel with no third-party dependencies.
 
 ## Install
 
-### Homebrew (recommended)
+Download the latest DMG from [GitHub Releases](https://github.com/thiientv/pesty/releases/latest), open it, and drag **Pesty** to **Applications**.
 
-```bash
-brew install --cask momenbasel/pesty/pesty
-```
+On first direct paste, macOS requests Accessibility access. Grant it in **System Settings → Privacy & Security → Accessibility**.
 
-### Direct download
+## Usage
 
-1. Download `Pesty-x.y.z.dmg` from the [latest release](https://github.com/momenbasel/pesty/releases/latest).
-2. Open the DMG and drag **Pesty** to **Applications**.
-3. Launch Pesty. It lives in your menu bar.
+The default shortcut is `⌘⇧V`.
 
-The build is signed with a Developer ID and notarized by Apple, so it opens without Gatekeeper warnings.
+### Pinboards
 
-## First run
+- Click `+` in the top bar to create a pinboard.
+- Right-click a pinboard to rename it, change its color, or delete it.
+- Right-click a clip and use **Copy to Pinboard** or **Move to Pinboard**.
+- Drag a clip onto another pinboard tab to move it there.
+- Inside a pinboard, right-click a clip and choose **Pin to Top** or **Unpin from Top**.
+- Drag clips left or right to reorder them inside a pinboard. Pinned clips remain before unpinned clips.
+- Use a trackpad horizontal gesture or a regular vertical mouse wheel to move through long clip strips.
 
-1. Press **`⌘⇧V`** (the default shortcut) to open the strip.
-2. Pick a clip and press `return`.
-   - **Direct-download / Homebrew build:** the first time you paste, macOS asks for **Accessibility** permission - grant it so Pesty can paste directly into other apps. You can change this anytime in **Settings → Permissions**.
-   - **Mac App Store build:** fully sandboxed and requests **no** permissions - the clip is copied and focus returns to your app, so just press **`⌘V`** to paste.
-
-## Keyboard shortcuts
+### Keyboard shortcuts
 
 | Key | Action |
 | --- | --- |
-| `⌘⇧V` | Show / hide the strip (configurable) |
-| `⌘⇧S` (with strip open) | Open Settings |
-| `⌘⇧P` (with strip open) | Pause / resume clipboard monitoring |
-| `←` `→` `↑` `↓` | Move selection |
-| `return` | Paste selected clip |
-| `⌘1`–`⌘9` (configurable) | Quick-paste the Nth clip; add the plain-text modifier (default `⇧`) to paste unformatted |
-| `⌫` (search empty) or `⌘⌫` | Delete selected clip |
-| type anything | Search |
-| `esc` | Clear search, then close |
+| `⌘⇧V` | Show or hide the strip; configurable in Settings |
+| `⌘⇧S` | Open Settings while the strip is visible |
+| `⌘⇧P` | Pause or resume clipboard monitoring |
+| `←` `→` `↑` `↓` | Move the selection |
+| `return` | Paste the selected clip |
+| `⌘1`–`⌘9` | Quick-paste a visible clip; modifiers are configurable |
+| `⌫` or `⌘⌫` | Delete the selected clip or clips |
+| Type | Search the current history or pinboard |
+| `esc` | Clear selection/search, then close the strip |
 
-## Build from source
+## Build from Source
 
-Requires macOS 14+ and Xcode 16+ (Swift 6).
+Requirements:
+
+- macOS 14 or later.
+- Swift 6 toolchain. Release CI currently uses Xcode 26.3.
 
 ```bash
-git clone https://github.com/momenbasel/pesty.git
+git clone https://github.com/thiientv/pesty.git
 cd pesty
-swift run            # run in place
-# or build a distributable .app:
+
+swift build
+swift run
+```
+
+For UI development with generated sample clips:
+
+```bash
+swift run Pesty --demo
+```
+
+To assemble a universal, ad-hoc-signed app for local use:
+
+```bash
 VERSION=1.0.0 BUILD=1 ./scripts/build_app.sh
 open packaging/Pesty.app
 ```
 
-To produce a signed + notarized DMG (needs a Developer ID cert and an App Store Connect API key):
+> [!WARNING]
+> Development and release builds are not data-isolated. They can read and update the same `Application Support/Pesty` or iCloud Drive `Pesty` store. Quit the installed release before running a development build, and back up the store before testing deletion, retention, demo data, or sync changes.
+
+## Release
+
+The **Release** GitHub Actions workflow is started manually from **Actions → Release → Run workflow**. It builds a universal app, imports the Developer ID certificate, signs and notarizes the app and DMG, computes its SHA-256 checksum, and creates the GitHub release.
+
+Configure these repository secrets before running the workflow:
+
+```text
+MACOS_CERT_P12_BASE64
+MACOS_CERT_PASSWORD
+KEYCHAIN_PASSWORD
+ASC_KEY_P8_BASE64
+ASC_KEY_ID
+ASC_ISSUER_ID
+SIGN_IDENTITY
+```
+
+A local signed and notarized release uses the same build scripts:
 
 ```bash
+VERSION=1.0.0 BUILD=1 \
 SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 ASC_KEY="$HOME/.appstoreconnect/private_keys/AuthKey_XXXX.p8" \
-ASC_KEY_ID="XXXX" ASC_ISSUER="<issuer-uuid>" \
+ASC_KEY_ID="XXXX" \
+ASC_ISSUER="<issuer-uuid>" \
 ./scripts/release_build.sh
 ```
 
-## Project structure
+The output is written to `packaging/Pesty-<version>.dmg`.
 
+The Mac App Store package has a separate sandboxed build:
+
+```bash
+VERSION=1.0.0 BUILD=1 ./scripts/build_mas.sh
 ```
+
+It requires an Apple Distribution certificate, installer certificate, provisioning profile, App Store Connect app, and matching iCloud container.
+
+## Project Structure
+
+```text
 Sources/Pesty/
-  Main.swift            entry point
-  AppController.swift   app delegate, hotkey + menu-bar wiring, paste flow
-  Models/               ClipItem, ClipType, Pinboard
-  Store/                ClipboardStore (history, pinboards, persistence)
-  Monitor/              ClipboardMonitor (pasteboard polling), PasteService (⌘V injection)
-  Hotkey/               HotKeyCenter (Carbon global hotkey)
-  UI/                   BarView, ClipCardView, PinboardTabs, the sliding panel
-  Settings/             Settings store + preferences window + hotkey recorder
-  Util/                 icons, color hex, visual-effect view, launch-at-login
-scripts/                build, icon, sign + notarize
-packaging/              Info.plist, entitlements, generated artifacts
+  Main.swift            Application entry point
+  AppController.swift   App lifecycle, menu bar, hotkeys, and paste flow
+  Models/               Clip and pinboard models
+  Store/                Clipboard history, pinboards, and persistence
+  Monitor/              Clipboard capture and paste service
+  Hotkey/               Carbon global hotkey registration
+  UI/                   Strip, cards, pinboard tabs, preview, and editor
+  Settings/             Preferences and shortcut recorder
+  Sync/                 CloudKit schema and synchronization
+  Util/                 Shared AppKit and SwiftUI utilities
+scripts/                Local, release, notarization, icon, and MAS builds
+packaging/              Info.plist, entitlements, and generated artifacts
+.github/workflows/      CI and manual release automation
 ```
-
-## Pesty vs other Mac clipboard managers
-
-| | Pesty | Paste | Maccy |
-| --- | --- | --- | --- |
-| Price | **Free** (optional one-time fee on the Mac App Store) | Subscription | Free |
-| Open source | **Yes (MIT)** | No | Yes |
-| Color-coded strip UI | Yes | Yes | No (list) |
-| Pinboards | Yes | Yes | No |
-| Source-app color coding | Yes | Yes | No |
-| Native (no Electron) | Yes | Yes | Yes |
-| Signed & notarized | Yes | Yes | Yes |
-
-Pesty reimplements the parts of Paste people use every day - the slide-up strip, color-coded cards, pinboards, search, and keyboard-driven pasting - as a free, native, open-source app. If you love Paste, [buy it](https://pasteapp.io); it's excellent. Pesty is for people who want a free, hackable **Paste app alternative**, or a prettier alternative to **Maccy** with a strip UI and pinboards.
-
-## FAQ
-
-**Is Pesty free?** Yes - free and open source (MIT) on GitHub and via Homebrew. The Mac App Store build carries a small one-time fee, but that's optional: it only helps cover the yearly Apple Developer Program fee that keeps the app signed and notarized. It's the same app either way.
-
-**Is Pesty a good clipboard manager for Mac?** It keeps a searchable history of everything you copy (text, links, images, files, colors) and pastes it back with a keystroke - with pinboards and a color-coded strip.
-
-**Does it keep my clipboard private?** Yes. Everything stays on your Mac - no servers, no analytics, no network calls - and password-manager clips are ignored.
-
-**What macOS does it need?** macOS 14 (Sonoma) or later, on Apple Silicon or Intel.
-
-> **Keywords:** clipboard manager for Mac, macOS clipboard history, free Paste app alternative, open-source clipboard manager, Maccy alternative, copy-paste history, clipboard pinboards.
-
-🔗 **Website:** [www.moamenbasel.com/pesty](https://www.moamenbasel.com/pesty/)
 
 ## Contributing
 
-PRs welcome - see [CONTRIBUTING.md](CONTRIBUTING.md). Good first issues: large preview pane, drag-and-drop out of cards, strip resize handle, iOS/iPad companion, more content-type renderers.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Keep changes focused, preserve compatibility with existing clipboard stores, and run `swift build` before opening a pull request.
 
 ## License
 
@@ -159,4 +165,4 @@ PRs welcome - see [CONTRIBUTING.md](CONTRIBUTING.md). Good first issues: large p
 
 ## Disclaimer
 
-Pesty is an independent project and is **not affiliated with, endorsed by, or connected to** Paste or its makers (Wonder Warp / FIPLAB). "Paste" is referenced only to describe the inspiration. All trademarks belong to their respective owners.
+Pesty is an independent project and is not affiliated with, endorsed by, or connected to Paste or its makers. All trademarks belong to their respective owners.

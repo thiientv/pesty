@@ -131,6 +131,8 @@ enum CKSchema {
     static func populate(_ record: CKRecord, from board: Pinboard) {
         record["name"] = board.name
         record["colorHex"] = board.colorHex
+        record["pinnedItemIDs"] = board.pinnedItemIDs.map(\.uuidString)
+        record["itemOrderIDs"] = board.itemOrderIDs.map(\.uuidString)
     }
 
     static func decodePinboard(_ record: CKRecord) -> Pinboard? {
@@ -139,6 +141,10 @@ enum CKSchema {
               let name = record["name"] as? String else { return nil }
         return Pinboard(id: id, name: name,
                         colorHex: (record["colorHex"] as? String) ?? "#5B8DEF",
-                        items: [])
+                        items: [],
+                        pinnedItemIDs: ((record["pinnedItemIDs"] as? [String]) ?? [])
+                            .compactMap(UUID.init(uuidString:)),
+                        itemOrderIDs: ((record["itemOrderIDs"] as? [String]) ?? [])
+                            .compactMap(UUID.init(uuidString:)))
     }
 }

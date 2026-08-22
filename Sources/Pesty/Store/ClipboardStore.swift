@@ -10,6 +10,11 @@ enum BarSource: Equatable {
     case pinboard(UUID)
 }
 
+enum ItemDropPosition: Equatable {
+    case before
+    case after
+}
+
 @Observable
 @MainActor
 final class ClipboardStore {
@@ -27,6 +32,8 @@ final class ClipboardStore {
     var selectedID: UUID?
     private(set) var multiSelectedIDs: Set<UUID> = []
     private var selectionAnchorID: UUID?
+    private(set) var draggedItemID: UUID?
+    private(set) var draggedSource: BarSource?
 
     /// Bumped every time the bar is about to present. The hosting view is
     /// built once and cached, so the strip keeps its scroll offset across
@@ -89,7 +96,7 @@ final class ClipboardStore {
         case .history:
             base = history
         case .pinboard(let id):
-            base = pinboards.first(where: { $0.id == id })?.items ?? []
+            base = pinboards.first(where: { $0.id == id })?.orderedItems ?? []
         }
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !q.isEmpty else { return base }
@@ -208,6 +215,7 @@ final class ClipboardStore {
             guard let boardIndex = pinboards.firstIndex(where: { $0.id == boardID }) else { return }
             removed = pinboards[boardIndex].items.filter { ids.contains($0.id) }
             pinboards[boardIndex].items.removeAll { ids.contains($0.id) }
+            pinboards[boardIndex].reconcileItemReferences()
         }
         for entry in removed { deleteImageFile(entry) }
         multiSelectedIDs.subtract(ids)
@@ -248,6 +256,13 @@ final class ClipboardStore {
         scheduleSave()
     }
 
+    func setPinboardColor(_ id: UUID, to colorHex: String) {
+        guard let i = pinboards.firstIndex(where: { $0.id == id }),
+              let color = NSColor(hex: colorHex) else { return }
+        pinboards[i].colorHex = color.hexString
+        scheduleSave()
+    }
+
     func deletePinboard(_ id: UUID) {
         guard let i = pinboards.firstIndex(where: { $0.id == id }) else { return }
         if case .pinboard(let cur) = source, cur == id { source = .history }
@@ -276,7 +291,148 @@ final class ClipboardStore {
             createdAt: item.createdAt)
         if let dup = duplicateImageFile(item) { copy.imageFileName = dup }
         pinboards[i].items.insert(copy, at: 0)
+        pinboards[i].itemOrderIDs.insert(copy.id, at: 0)
         scheduleSave()
+    }
+
+    var currentPinboardID: UUID? {
+        guard case .pinboard(let id) = source else { return nil }
+        return id
+    }
+
+    func isPinned(_ itemID: UUID, inPinboard boardID: UUID) -> Bool {
+        pinboards.first(where: { $0.id == boardID })?.isPinned(itemID) ?? false
+    }
+
+    func togglePinned(_ itemID: UUID, inPinboard boardID: UUID) {
+        guard let boardIndex = pinboards.firstIndex(where: { $0.id == boardID }),
+              let item = pinboards[boardIndex].items.first(where: { $0.id == itemID }) else { return }
+        var board = pinboards[boardIndex]
+        var ordered = board.orderedItems.filter { $0.id != itemID }
+        if let pinnedIndex = board.pinnedItemIDs.firstIndex(of: itemID) {
+            board.pinnedItemIDs.remove(at: pinnedIndex)
+            let remainingPinned = Set(board.pinnedItemIDs)
+            let insertionIndex = ordered.firstIndex { !remainingPinned.contains($0.id) } ?? ordered.endIndex
+            ordered.insert(item, at: insertionIndex)
+        } else {
+            board.pinnedItemIDs.insert(itemID, at: 0)
+            ordered.insert(item, at: 0)
+        }
+        board.items = ordered
+        board.itemOrderIDs = ordered.map(\.id)
+        board.reconcileItemReferences()
+        pinboards[boardIndex] = board
+        multiSelectedIDs = []
+        selectedID = itemID
+        selectionAnchorID = itemID
+        scheduleSave()
+    }
+
+    func moveItem(_ itemID: UUID, from source: BarSource, toPinboard targetID: UUID) {
+        guard source != .pinboard(targetID),
+              let targetIndex = pinboards.firstIndex(where: { $0.id == targetID }) else { return }
+        let removedIndex = self.source == source
+            ? visibleItems.firstIndex(where: { $0.id == itemID })
+            : nil
+        let movingItem: ClipItem?
+        switch source {
+        case .history:
+            guard let itemIndex = history.firstIndex(where: { $0.id == itemID }) else { return }
+            movingItem = history.remove(at: itemIndex)
+        case .pinboard(let sourceID):
+            guard let sourceIndex = pinboards.firstIndex(where: { $0.id == sourceID }),
+                  let itemIndex = pinboards[sourceIndex].items.firstIndex(where: { $0.id == itemID })
+            else { return }
+            movingItem = pinboards[sourceIndex].items.remove(at: itemIndex)
+            pinboards[sourceIndex].reconcileItemReferences()
+        }
+        guard let movingItem else { return }
+
+        if pinboards[targetIndex].items.contains(where: { $0.sameContent(as: movingItem) }) {
+            deleteImageFile(movingItem)
+        } else {
+            pinboards[targetIndex].items.insert(movingItem, at: 0)
+            pinboards[targetIndex].itemOrderIDs.removeAll { $0 == itemID }
+            pinboards[targetIndex].itemOrderIDs.insert(itemID, at: 0)
+            pinboards[targetIndex].reconcileItemReferences()
+        }
+
+        retentionPrunedRecordNames.remove(itemID.uuidString)
+        multiSelectedIDs.remove(itemID)
+        if self.source == source {
+            let remaining = visibleItems
+            if let removedIndex, !remaining.isEmpty {
+                selectedID = remaining[min(removedIndex, remaining.count - 1)].id
+            } else {
+                selectedID = remaining.first?.id
+            }
+            selectionAnchorID = selectedID
+        }
+        reconcileMultiSelection()
+        scheduleSave()
+    }
+
+    func canReorderItem(_ itemID: UUID, relativeTo targetID: UUID, in source: BarSource) -> Bool {
+        guard searchText.isEmpty, itemID != targetID,
+              self.source == source else { return false }
+        switch source {
+        case .history:
+            return history.contains(where: { $0.id == itemID })
+                && history.contains(where: { $0.id == targetID })
+        case .pinboard(let boardID):
+            guard let board = pinboards.first(where: { $0.id == boardID }) else { return false }
+            return board.items.contains(where: { $0.id == itemID })
+                && board.items.contains(where: { $0.id == targetID })
+                && board.isPinned(itemID) == board.isPinned(targetID)
+        }
+    }
+
+    func reorderItem(_ itemID: UUID, relativeTo targetID: UUID,
+                     position: ItemDropPosition, in source: BarSource) {
+        guard canReorderItem(itemID, relativeTo: targetID, in: source) else { return }
+        switch source {
+        case .history:
+            guard let sourceIndex = history.firstIndex(where: { $0.id == itemID }) else { return }
+            let movingItem = history.remove(at: sourceIndex)
+            guard let targetIndex = history.firstIndex(where: { $0.id == targetID }) else { return }
+            let insertionIndex = position == .before ? targetIndex : targetIndex + 1
+            history.insert(movingItem, at: insertionIndex)
+        case .pinboard(let boardID):
+            guard let boardIndex = pinboards.firstIndex(where: { $0.id == boardID }) else { return }
+            var board = pinboards[boardIndex]
+            var ordered = board.orderedItems
+            guard let sourceIndex = ordered.firstIndex(where: { $0.id == itemID }) else { return }
+            let movingItem = ordered.remove(at: sourceIndex)
+            guard let targetIndex = ordered.firstIndex(where: { $0.id == targetID }) else { return }
+            let insertionIndex = position == .before ? targetIndex : targetIndex + 1
+            ordered.insert(movingItem, at: insertionIndex)
+            let pinned = Set(board.pinnedItemIDs)
+            board.items = ordered
+            board.itemOrderIDs = ordered.map(\.id)
+            board.pinnedItemIDs = ordered.filter { pinned.contains($0.id) }.map(\.id)
+            board.reconcileItemReferences()
+            pinboards[boardIndex] = board
+        }
+        selectedID = itemID
+        selectionAnchorID = itemID
+        scheduleSave()
+    }
+
+    func beginDragging(_ itemID: UUID) {
+        guard visibleItems.contains(where: { $0.id == itemID }) else { return }
+        draggedItemID = itemID
+        draggedSource = source
+    }
+
+    func finishDragging() {
+        draggedItemID = nil
+        draggedSource = nil
+    }
+
+    func moveDraggedItem(toPinboard boardID: UUID) {
+        guard let draggedItemID, let draggedSource else { return }
+        moveItem(draggedItemID, from: draggedSource, toPinboard: boardID)
+        finishDragging()
     }
 
     func item(withID id: UUID) -> ClipItem? {
@@ -335,6 +491,7 @@ final class ClipboardStore {
                 updated.createdAt = now
                 pinboards[b].items[i] = updated
                 removeContentDuplicates(of: updated, in: &pinboards[b].items)
+                pinboards[b].reconcileItemReferences()
                 changed = true
             }
         }
@@ -574,6 +731,7 @@ final class ClipboardStore {
         for i in pinboards.indices {
             removedPinned += pinboards[i].items.filter { set.contains($0.id) }
             pinboards[i].items.removeAll { set.contains($0.id) }
+            pinboards[i].reconcileItemReferences()
         }
         let removedBoards = pinboards.filter { set.contains($0.id) }
         pinboards.removeAll { set.contains($0.id) }
@@ -586,15 +744,20 @@ final class ClipboardStore {
         scheduleSave()
     }
 
-    /// Upserts pinboard name/color only; item membership syncs through clip records.
+    /// Upserts pinboard metadata and pinned order; item membership syncs through clip records.
     func applyRemote(pinboards boards: [Pinboard]) {
         guard !boards.isEmpty else { return }
         for b in boards {
             if let i = pinboards.firstIndex(where: { $0.id == b.id }) {
                 pinboards[i].name = b.name
                 pinboards[i].colorHex = b.colorHex
+                pinboards[i].pinnedItemIDs = b.pinnedItemIDs
+                pinboards[i].itemOrderIDs = b.itemOrderIDs
+                pinboards[i].reconcileItemReferences(preservingMissing: true)
             } else {
-                pinboards.append(Pinboard(id: b.id, name: b.name, colorHex: b.colorHex, items: []))
+                pinboards.append(Pinboard(id: b.id, name: b.name, colorHex: b.colorHex,
+                                          items: [], pinnedItemIDs: b.pinnedItemIDs,
+                                          itemOrderIDs: b.itemOrderIDs))
             }
         }
         scheduleSave()
@@ -635,14 +798,31 @@ final class ClipboardStore {
         if let dupIdx = pinboards[i].items.firstIndex(where: { contentKey($0) == key }) {
             let dup = pinboards[i].items[dupIdx]
             if dup.createdAt >= item.createdAt {
+                if let pinnedIndex = pinboards[i].pinnedItemIDs.firstIndex(of: item.id) {
+                    pinboards[i].pinnedItemIDs[pinnedIndex] = dup.id
+                }
+                pinboards[i].itemOrderIDs = pinboards[i].itemOrderIDs.map {
+                    $0 == item.id ? dup.id : $0
+                }
+                pinboards[i].reconcileItemReferences(preservingMissing: true)
                 deleteImageFile(item)
                 for old in replaced { deleteImageFile(old) }
                 return
+            }
+            if let pinnedIndex = pinboards[i].pinnedItemIDs.firstIndex(of: dup.id) {
+                pinboards[i].pinnedItemIDs[pinnedIndex] = item.id
+            }
+            pinboards[i].itemOrderIDs = pinboards[i].itemOrderIDs.map {
+                $0 == dup.id ? item.id : $0
             }
             pinboards[i].items.remove(at: dupIdx)
             deleteImageFile(dup)
         }
         insertSortedByDate(item, into: &pinboards[i].items)
+        if !pinboards[i].itemOrderIDs.contains(item.id) {
+            pinboards[i].itemOrderIDs.append(item.id)
+        }
+        pinboards[i].reconcileItemReferences(preservingMissing: true)
         retentionPrunedRecordNames.remove(item.id.uuidString)
         // Same-id replace: drop the old image file unless something still uses it.
         for old in replaced { deleteImageFile(old) }
@@ -707,9 +887,14 @@ final class ClipboardStore {
         var byID: [UUID: Pinboard] = Dictionary(uniqueKeysWithValues: pinboards.map { ($0.id, $0) })
         for b in snap.pinboards {
             if var existing = byID[b.id] {
+                existing.name = b.name
+                existing.colorHex = b.colorHex
                 for it in b.items where !existing.items.contains(where: { $0.sameContent(as: it) }) {
                     existing.items.append(it)
                 }
+                existing.pinnedItemIDs = b.pinnedItemIDs
+                existing.itemOrderIDs = b.itemOrderIDs
+                existing.reconcileItemReferences()
                 byID[b.id] = existing
             } else {
                 byID[b.id] = b

@@ -11,7 +11,7 @@
 ![Platform](https://img.shields.io/badge/macOS-14%2B-black?style=flat-square&logo=apple)
 ![Universal](https://img.shields.io/badge/Universal-Apple%20Silicon%20%2B%20Intel-orange?style=flat-square)
 
-<img src="docs/assets/demo.gif" width="820" alt="Pesty clipboard strip" />
+<img src="docs/assets/demo-app.gif" width="820" alt="Pesty clipboard strip" />
 
 </div>
 

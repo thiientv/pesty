@@ -53,6 +53,46 @@ enum PasteService {
         return pasteboard.changeCount
     }
 
+    #if !MAS
+    private static func sendCommandV() {
+        let src = CGEventSource(stateID: .combinedSessionState)
+        let v = CGKeyCode(kVK_ANSI_V)
+        guard let down = CGEvent(keyboardEventSource: src, virtualKey: v, keyDown: true),
+              let up = CGEvent(keyboardEventSource: src, virtualKey: v, keyDown: false) else { return }
+        down.flags = .maskCommand
+        up.flags = .maskCommand
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+    }
+
+    private static func waitForFrontmost(_ app: NSRunningApplication, attempts: Int) {
+        guard attempts > 0, !app.isTerminated else { return }
+        if NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { sendCommandV() }
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
+            waitForFrontmost(app, attempts: attempts - 1)
+        }
+    }
+
+    @discardableResult
+    static func ensureAccessibility(prompt: Bool) -> Bool {
+        let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        let opts = [key: prompt] as CFDictionary
+        return AXIsProcessTrustedWithOptions(opts)
+    }
+
+    private static func requestAccessibility() -> Bool {
+        guard !ensureAccessibility(prompt: true) else { return true }
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        ) else { return false }
+        NSWorkspace.shared.open(url)
+        return false
+    }
+    #endif
+
     static func paste(_ item: ClipItem,
                       into targetApp: NSRunningApplication?,
                       monitor: ClipboardMonitor,
@@ -70,41 +110,15 @@ enum PasteService {
         target.activate()
         #else
         // Direct-download build: optionally paste straight into the active app by
-        // synthesizing ⌘V. This requires the user's Accessibility grant.
-        guard Settings.shared.pasteDirectly && AXIsProcessTrusted() else { return }
+        // synthesizing ⌘V. This requires the user's Accessibility grant. Prompt
+        // when a rebuilt app no longer matches the identity macOS previously trusted.
+        guard Settings.shared.pasteDirectly else {
+            target.activate()
+            return
+        }
+        guard requestAccessibility() else { return }
         target.activate()
         waitForFrontmost(target, attempts: 20)
         #endif
     }
-
-    #if !MAS
-    private static func waitForFrontmost(_ app: NSRunningApplication, attempts: Int) {
-        guard attempts > 0, !app.isTerminated else { return }
-        if NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { sendCommandV() }
-            return
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
-            waitForFrontmost(app, attempts: attempts - 1)
-        }
-    }
-
-    private static func sendCommandV() {
-        let src = CGEventSource(stateID: .combinedSessionState)
-        let v = CGKeyCode(kVK_ANSI_V)
-        guard let down = CGEvent(keyboardEventSource: src, virtualKey: v, keyDown: true),
-              let up = CGEvent(keyboardEventSource: src, virtualKey: v, keyDown: false) else { return }
-        down.flags = .maskCommand
-        up.flags = .maskCommand
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
-    }
-
-    @discardableResult
-    static func ensureAccessibility(prompt: Bool) -> Bool {
-        let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        let opts = [key: prompt] as CFDictionary
-        return AXIsProcessTrustedWithOptions(opts)
-    }
-    #endif
 }

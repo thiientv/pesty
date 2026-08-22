@@ -161,7 +161,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Keep changes focused, preserve compatibi
 
 ## License
 
-[MIT](LICENSE) © 2026 Moamen Basel.
+[MIT](LICENSE) © 2026.
 
 ## Disclaimer
 

@@ -38,9 +38,10 @@ struct ClipCardView: View {
         .overlay(
             RoundedRectangle(cornerRadius: Theme.cardCorner, style: .continuous)
                 .strokeBorder(selected ? Theme.selection : Theme.cardBorder,
-                              lineWidth: selected ? 1.5 : 1)
+                              lineWidth: Theme.cardBorderWidth)
         )
-        .shadow(color: .black.opacity(0.18), radius: 5, y: 2)
+        .shadow(color: selected ? Theme.selectedCardShadow : Theme.cardShadow,
+                radius: selected ? 5 : 4, y: 2)
         .scaleEffect(hovering && !selected ? 1.015 : 1.0)
         .zIndex(selected ? 1 : 0)
         .animation(.spring(response: 0.32, dampingFraction: 0.72), value: selected)

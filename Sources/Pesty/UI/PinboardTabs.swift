@@ -38,10 +38,10 @@ struct PinboardTabs: View {
 
                 Button(action: addPinboard) {
                     Image(systemName: "plus")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Theme.chromeTextSecondary)
-                        .frame(width: 26, height: 26)
-                        .background(Theme.fieldBG, in: Circle())
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("New Pinboard")
@@ -53,7 +53,7 @@ struct PinboardTabs: View {
     private func pill(title: String, dot: Color?, icon: String? = nil, dropTarget: Bool = false,
                       selected: Bool, action: @escaping () -> Void) -> some View {
         let background = dropTarget
-            ? (dot ?? Theme.selection).opacity(0.42)
+            ? (dot ?? Theme.selection).opacity(0.20)
             : (selected ? Theme.pillSelected : Theme.pillBG)
         return Button(action: action) {
             HStack(spacing: 6) {
@@ -62,10 +62,10 @@ struct PinboardTabs: View {
                         .font(.system(size: 11, weight: .semibold))
                 }
                 if let dot {
-                    Circle().fill(dot).frame(width: 7, height: 7)
+                    Circle().fill(dot).frame(width: 8, height: 8)
                 }
                 Text(title)
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(.system(size: 12.5, weight: selected ? .semibold : .medium))
                     .lineLimit(1)
             }
             .foregroundStyle(selected ? Theme.chromeTextPrimary : Theme.chromeTextSecondary)

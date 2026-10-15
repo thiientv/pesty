@@ -269,7 +269,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// RegisterEventHotKey failure during display churn would leave the app with no
     /// hotkey at all until the next relaunch - the exact bug this is meant to fix.
     @objc private func screenParametersChanged() {
-        barController?.forceHide()
+        guard barController?.forceHideIfScreenChanged() == true else { return }
         stopKeyMonitor()
     }
 

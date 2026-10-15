@@ -33,6 +33,10 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
 
     private var phase: Phase = .hidden
     private var epoch = 0
+    private var clickOutsideMonitor: Any?
+    /// The visible frame the bar was laid out for, so a screen-parameters
+    /// notification that changes nothing about it can be ignored.
+    private var presentedVisibleFrame: NSRect?
 
     /// True while the bar is up or on its way up. `AppController.toggleBar` asks this
     /// instead of `window.isVisible`.
@@ -93,6 +97,9 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         }
         super.init(window: panel)
         panel.delegate = self
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(appDidBecomeActive),
+            name: NSApplication.didBecomeActiveNotification, object: nil)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) unavailable") }
@@ -140,6 +147,33 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         body()
     }
 
+    /// Since macOS 14 activation is cooperative: the active app has to yield first, and
+    /// a busy one can take longer than the slide-up animation. Treating "not key yet"
+    /// as a click outside made the bar slide up and straight back down. Detect the
+    /// click itself instead - a global monitor only sees clicks landing in other apps.
+    private func startClickOutsideMonitor() {
+        stopClickOutsideMonitor()
+        guard Settings.shared.hideOnClickOutside else { return }
+        clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        ) { _ in
+            MainActor.assumeIsolated {
+                guard !AppController.shared.suppressAutoHide else { return }
+                AppController.shared.hideBar()
+            }
+        }
+    }
+
+    private func stopClickOutsideMonitor() {
+        if let m = clickOutsideMonitor { NSEvent.removeMonitor(m); clickOutsideMonitor = nil }
+    }
+
+    /// Activation that lands after the panel was ordered front still owes it key focus.
+    @objc private func appDidBecomeActive() {
+        guard isPresented, let panel = window, !panel.isKeyWindow else { return }
+        panel.makeKey()
+    }
+
     func show() {
         guard let panel = window else { return }
         guard let screen = Self.targetScreen() else { return }
@@ -164,22 +198,15 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
 
         let token = beginTransition()
         phase = .showing(token)
+        presentedVisibleFrame = vf
 
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
+        startClickOutsideMonitor()
 
         let finish: @MainActor @Sendable () -> Void = { [weak self] in
             guard let self else { return }
-            self.settle(token) {
-                self.phase = .shown
-                // The panel can lose key focus while it is still animating up, and
-                // windowDidResignKey ignores that because the bar is not .shown yet.
-                // Catch it here so the bar does not sit on screen unfocused forever.
-                if Settings.shared.hideOnClickOutside,
-                   panel.isVisible, !panel.isKeyWindow, !AppController.shared.suppressAutoHide {
-                    AppController.shared.hideBar()
-                }
-            }
+            self.settle(token) { self.phase = .shown }
         }
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = Self.showDuration
@@ -196,6 +223,8 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
 
         let token = beginTransition()
         phase = .hiding(token)
+        stopClickOutsideMonitor()
+        presentedVisibleFrame = nil
         let down = NSRect(x: 0, y: -content.frame.height,
                           width: content.frame.width, height: content.frame.height)
 
@@ -220,12 +249,30 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
     func forceHide() {
         _ = beginTransition()
         phase = .hidden
+        stopClickOutsideMonitor()
+        presentedVisibleFrame = nil
         window?.orderOut(nil)
     }
 
+    /// `didChangeScreenParametersNotification` also fires for changes that leave the
+    /// bar's display untouched, such as a colour-profile switch, and dropping the bar
+    /// then made it vanish the instant it appeared. Only drop it when the visible
+    /// frame it was laid out for no longer exists. Returns whether it was dropped.
+    func forceHideIfScreenChanged() -> Bool {
+        guard isPresented else { return false }
+        if let frame = presentedVisibleFrame,
+           NSScreen.screens.contains(where: { $0.visibleFrame == frame }) {
+            return false
+        }
+        forceHide()
+        return true
+    }
+
+    /// Covers leaving the bar without a click, such as ⌘-Tab. Clicks are handled by
+    /// the global monitor, which also works when activation never completed.
     func windowDidResignKey(_ notification: Notification) {
         guard Settings.shared.hideOnClickOutside,
-              phase == .shown,
+              isPresented,
               !AppController.shared.suppressAutoHide else { return }
         AppController.shared.hideBar()
     }

@@ -108,17 +108,54 @@ final class ClipboardStore {
         return visibleItems.first(where: { $0.id == id })
     }
 
+    private func moveHistoryItemToTop(at idx: Int, createdAt: Date) {
+        var existing = history.remove(at: idx)
+        existing.createdAt = createdAt
+        history.insert(existing, at: 0)
+        if source == .history && searchText.isEmpty && multiSelectedIDs.isEmpty {
+            selectedID = existing.id
+            selectionAnchorID = existing.id
+        }
+        scheduleSave()
+    }
+
+    /// Copies minted for another container get their own UUID (one sync record per
+    /// container) and their own image file, so deleting one never orphans the other.
+    private func independentCopy(of item: ClipItem) -> ClipItem {
+        var copy = ClipItem(
+            type: item.type,
+            text: item.text,
+            rtfData: item.rtfData,
+            imageFileName: item.imageFileName,
+            imageHash: item.imageHash,
+            fileURLs: item.fileURLs,
+            colorHex: item.colorHex,
+            sourceBundleID: item.sourceBundleID,
+            sourceAppName: item.sourceAppName,
+            customTitle: item.customTitle,
+            createdAt: item.createdAt)
+        if let dup = duplicateImageFile(item) { copy.imageFileName = dup }
+        return copy
+    }
+
+    /// Pasting or copying a clip suppresses the clipboard monitor, so it is promoted
+    /// to the top of history here instead. Pinboard clips that are missing from
+    /// history (moved out or trimmed) are re-added as a copy. Pinboards keep their
+    /// manual order.
+    func markUsed(_ item: ClipItem) {
+        if let idx = history.firstIndex(where: { $0.sameContent(as: item) }) {
+            moveHistoryItemToTop(at: idx, createdAt: Date())
+            return
+        }
+        var copy = independentCopy(of: item)
+        copy.createdAt = Date()
+        addCaptured(copy)
+    }
+
     func addCaptured(_ item: ClipItem) {
         if let idx = history.firstIndex(where: { $0.sameContent(as: item) }) {
             if item.imageFileName != history[idx].imageFileName { deleteImageFile(item) }
-            var existing = history.remove(at: idx)
-            existing.createdAt = item.createdAt
-            history.insert(existing, at: 0)
-            if source == .history && searchText.isEmpty && multiSelectedIDs.isEmpty {
-                selectedID = existing.id
-                selectionAnchorID = existing.id
-            }
-            scheduleSave()
+            moveHistoryItemToTop(at: idx, createdAt: item.createdAt)
             return
         }
         history.insert(item, at: 0)
@@ -276,20 +313,7 @@ final class ClipboardStore {
     func saveToPinboard(_ item: ClipItem, boardID: UUID) {
         guard let i = pinboards.firstIndex(where: { $0.id == boardID }) else { return }
         if pinboards[i].items.contains(where: { $0.sameContent(as: item) }) { return }
-        // Pinboard copies mint their own UUID (one sync record per container).
-        var copy = ClipItem(
-            type: item.type,
-            text: item.text,
-            rtfData: item.rtfData,
-            imageFileName: item.imageFileName,
-            imageHash: item.imageHash,
-            fileURLs: item.fileURLs,
-            colorHex: item.colorHex,
-            sourceBundleID: item.sourceBundleID,
-            sourceAppName: item.sourceAppName,
-            customTitle: item.customTitle,
-            createdAt: item.createdAt)
-        if let dup = duplicateImageFile(item) { copy.imageFileName = dup }
+        let copy = independentCopy(of: item)
         pinboards[i].items.insert(copy, at: 0)
         pinboards[i].itemOrderIDs.insert(copy.id, at: 0)
         scheduleSave()

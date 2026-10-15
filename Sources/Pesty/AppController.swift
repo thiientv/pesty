@@ -321,12 +321,14 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let target = pasteTarget
         hideBar()
         PasteService.paste(item, into: target, monitor: monitor, asPlainText: asPlainText)
+        store.markUsed(item)
     }
 
     func copyItem(_ item: ClipItem) {
         let change = PasteService.copy(item)
         monitor.suppressUntilChangeCount = change
         hideBar()
+        store.markUsed(item)
     }
 
     var pasteMenuTitle: String {

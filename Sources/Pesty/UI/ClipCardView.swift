@@ -47,6 +47,7 @@ struct ClipCardView: View {
         .animation(.spring(response: 0.32, dampingFraction: 0.72), value: selected)
         .animation(.easeOut(duration: 0.14), value: hovering)
         .contentShape(Rectangle())
+        .hoverCursor(.pointingHand)
         .onHover { hovering = $0 }
         .onTapGesture(count: 2) { AppController.shared.pasteItem(item) }
         .onTapGesture { store.select(item.id) }

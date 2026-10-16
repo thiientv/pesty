@@ -1,8 +1,16 @@
 import SwiftUI
 
+private struct StripScrollState: Equatable {
+    let searchText: String
+    let selectedID: UUID?
+    let presentationToken: Int
+}
+
 struct BarView: View {
     @Bindable private var store = ClipboardStore.shared
     @Bindable private var settings = Settings.shared
+    @State private var searchExpanded = false
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         ZStack {
@@ -16,6 +24,10 @@ struct BarView: View {
         }
         .clipShape(RoundedCorners(radius: Theme.cornerRadius, corners: [.topLeft, .topRight]))
         .ignoresSafeArea()
+        .onChange(of: store.barPresentationToken) { _, _ in
+            searchFocused = false
+            searchExpanded = false
+        }
     }
 
     @ViewBuilder
@@ -60,32 +72,81 @@ struct BarView: View {
                 .foregroundStyle(settings.iCloudSync ? Theme.selection : Theme.chromeTextSecondary)
         }
         .buttonStyle(.plain)
+        .hoverCursor(.pointingHand)
         .help(settings.iCloudSync ? "iCloud sync on" : "Turn on iCloud sync")
     }
 
     private var searchIndicator: some View {
         HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(store.searchText.isEmpty ? Theme.chromeTextSecondary : Theme.chromeTextPrimary)
-            if !store.searchText.isEmpty {
-                Text(store.searchText)
+            if searchExpanded {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.chromeTextSecondary)
+                TextField("Search clips", text: Binding(
+                    get: { store.searchText },
+                    set: { query in
+                        store.searchText = query
+                        store.selectFirst()
+                    }
+                ))
+                    .textFieldStyle(.plain)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Theme.chromeTextPrimary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-                Button { store.searchText = ""; store.selectFirst() } label: {
+                    .frame(width: 180)
+                    .focused($searchFocused)
+                    .accessibilityLabel("Search clips")
+                    .onSubmit { AppController.shared.pasteSelected() }
+                    .onExitCommand {
+                        if store.searchText.isEmpty {
+                            searchFocused = false
+                            searchExpanded = false
+                        } else {
+                            store.searchText = ""
+                            store.selectFirst()
+                        }
+                    }
+            } else {
+                Button {
+                    searchExpanded = true
+                    searchFocused = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(store.searchText.isEmpty ? Theme.chromeTextSecondary : Theme.chromeTextPrimary)
+                        if !store.searchText.isEmpty {
+                            Text(store.searchText)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(Theme.chromeTextPrimary)
+                                .lineLimit(1)
+                                .truncationMode(.head)
+                        }
+                    }
+                    .frame(minWidth: 22, minHeight: 30)
+                    .hoverCursor(.pointingHand)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Search clips")
+                .help("Search clips")
+            }
+            if !store.searchText.isEmpty {
+                Button {
+                    store.searchText = ""
+                    store.selectFirst()
+                    searchFocused = searchExpanded
+                } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 12)).foregroundStyle(Theme.chromeTextTertiary)
                 }
                 .buttonStyle(.plain)
+                .hoverCursor(.pointingHand)
                 .accessibilityLabel("Clear search")
             }
         }
-        .padding(.horizontal, store.searchText.isEmpty ? 0 : 10)
+        .padding(.horizontal, store.searchText.isEmpty && !searchExpanded ? 0 : 10)
         .frame(minWidth: 22, maxWidth: 700, minHeight: 30, maxHeight: 30, alignment: .leading)
         .fixedSize(horizontal: true, vertical: false)
-        .background(store.searchText.isEmpty ? Color.clear : Theme.fieldBG, in: Capsule())
+        .background(store.searchText.isEmpty && !searchExpanded ? Color.clear : Theme.fieldBG, in: Capsule())
         .animation(.easeOut(duration: 0.15), value: store.searchText.isEmpty)
     }
 
@@ -100,6 +161,7 @@ struct BarView: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
+        .hoverCursor(.pointingHand)
         .help("Delete \(count) selected clips (⌘⌫)")
         .accessibilityLabel("Delete \(count) selected clips")
     }
@@ -121,6 +183,7 @@ struct BarView: View {
         .menuIndicator(.hidden)
         .frame(width: 34)
         .fixedSize()
+        .hoverCursor(.pointingHand)
     }
 
     /// Identifies the padded scroll content, so a presentation reset can land
@@ -149,22 +212,33 @@ struct BarView: View {
                 .id(Self.stripStartID)
             }
             .background(HorizontalScrollWheelSupport())
-            .onChange(of: store.barPresentationToken) { _, _ in
-                var transaction = Transaction()
-                transaction.disablesAnimations = true
-                withTransaction(transaction) {
-                    proxy.scrollTo(Self.stripStartID, anchor: .leading)
-                }
-            }
-            .onChange(of: store.selectedID) { _, id in
-                guard let id else { return }
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
-                    proxy.scrollTo(id, anchor: .center)
+            .onChange(of: StripScrollState(
+                searchText: store.searchText,
+                selectedID: store.selectedID,
+                presentationToken: store.barPresentationToken
+            )) { previous, current in
+                if previous.searchText != current.searchText
+                    || previous.presentationToken != current.presentationToken {
+                    // Filtering and presentation reset the offset without a competing selection scroll.
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        proxy.scrollTo(Self.stripStartID, anchor: .leading)
+                    }
+                } else if let id = current.selectedID, previous.selectedID != id {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.78)) {
+                        proxy.scrollTo(id, anchor: .center)
+                    }
                 }
             }
             .overlay { if store.visibleItems.isEmpty { emptyState } }
         }
         .frame(maxHeight: .infinity)
+        .transaction(value: store.searchText) { transaction in
+            // Also covers clearing the query and animations declared inside individual cards.
+            transaction.animation = nil
+            transaction.disablesAnimations = true
+        }
     }
 
     private var emptyState: some View {

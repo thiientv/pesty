@@ -42,6 +42,7 @@ struct PinboardTabs: View {
                         .foregroundStyle(Theme.chromeTextSecondary)
                         .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
+                        .hoverCursor(.pointingHand)
                 }
                 .buttonStyle(.plain)
                 .help("New Pinboard")
@@ -72,6 +73,8 @@ struct PinboardTabs: View {
             .padding(.horizontal, 12)
             .frame(height: 29)
             .background(background, in: Capsule())
+            .contentShape(Rectangle())
+            .hoverCursor(.pointingHand)
         }
         .buttonStyle(.plain)
         .fixedSize()

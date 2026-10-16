@@ -69,6 +69,7 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.isMovable = false
+        panel.acceptsMouseMovedEvents = true
         // Without this a stray close() would deallocate the panel and leave `window`
         // nil, which is another way to never show the bar again.
         panel.isReleasedWhenClosed = false

@@ -516,6 +516,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return nil
         }
 
+        // Native search editing owns text, selection, clipboard, and deletion keys.
+        if let editor = event.window?.firstResponder as? NSTextView, editor.isFieldEditor {
+            return event
+        }
+
         switch code {
         case kVK_Escape:
             if !store.multiSelectedIDs.isEmpty {

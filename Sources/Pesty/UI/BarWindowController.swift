@@ -33,6 +33,7 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
 
     private var phase: Phase = .hidden
     private var epoch = 0
+    private var hasActivatedPresentation = false
     private var clickOutsideMonitor: Any?
     /// The visible frame the bar was laid out for, so a screen-parameters
     /// notification that changes nothing about it can be ignored.
@@ -148,18 +149,19 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         body()
     }
 
-    /// Since macOS 14 activation is cooperative: the active app has to yield first, and
-    /// a busy one can take longer than the slide-up animation. Treating "not key yet"
-    /// as a click outside made the bar slide up and straight back down. Detect the
-    /// click itself instead - a global monitor only sees clicks landing in other apps.
+    /// During cooperative activation a click can still be delivered to the previous
+    /// app. Only dismiss for a click outside the panel, not merely a global event.
     private func startClickOutsideMonitor() {
         stopClickOutsideMonitor()
         guard Settings.shared.hideOnClickOutside else { return }
         clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
-        ) { _ in
+        ) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard !AppController.shared.suppressAutoHide else { return }
+                guard let self, self.isPresented,
+                      !AppController.shared.suppressAutoHide,
+                      let panel = self.window,
+                      !NSMouseInRect(NSEvent.mouseLocation, panel.frame, false) else { return }
                 AppController.shared.hideBar()
             }
         }
@@ -169,9 +171,29 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         if let m = clickOutsideMonitor { NSEvent.removeMonitor(m); clickOutsideMonitor = nil }
     }
 
+    private func dismissIfFocusMovedAway(_ token: Int) {
+        guard epoch == token,
+              Settings.shared.hideOnClickOutside,
+              isPresented,
+              !AppController.shared.suppressAutoHide,
+              let panel = window,
+              !panel.isKeyWindow else { return }
+
+        // Losing key status alone is not a dismissal: AppKit can temporarily have
+        // no key window while activating the panel or updating SwiftUI focus.
+        if !NSApp.isActive && !hasActivatedPresentation { return }
+        if NSApp.isActive && NSApp.keyWindow == nil {
+            panel.makeKey()
+            return
+        }
+        AppController.shared.hideBar()
+    }
+
     /// Activation that lands after the panel was ordered front still owes it key focus.
     @objc private func appDidBecomeActive() {
-        guard isPresented, let panel = window, !panel.isKeyWindow else { return }
+        guard isPresented, let panel = window else { return }
+        hasActivatedPresentation = true
+        guard !panel.isKeyWindow else { return }
         panel.makeKey()
     }
 
@@ -200,6 +222,7 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         let token = beginTransition()
         phase = .showing(token)
         presentedVisibleFrame = vf
+        hasActivatedPresentation = NSApp.isActive
 
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
@@ -269,12 +292,15 @@ final class BarWindowController: NSWindowController, NSWindowDelegate {
         return true
     }
 
-    /// Covers leaving the bar without a click, such as ⌘-Tab. Clicks are handled by
-    /// the global monitor, which also works when activation never completed.
+    /// Let AppKit finish its focus handoff before deciding whether the user left.
+    /// The transition token prevents an old notification from hiding a reopened bar.
     func windowDidResignKey(_ notification: Notification) {
         guard Settings.shared.hideOnClickOutside,
               isPresented,
               !AppController.shared.suppressAutoHide else { return }
-        AppController.shared.hideBar()
+        let token = epoch
+        DispatchQueue.main.async { [weak self] in
+            self?.dismissIfFocusMovedAway(token)
+        }
     }
 }
